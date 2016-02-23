@@ -12,31 +12,30 @@ import com.jaspersoft.jasperserver.jaxrs.client.apiadapters.resources.ResourceSe
 import com.jaspersoft.jasperserver.jaxrs.client.core.exceptions.JSClientWebException;
 import com.jaspersoft.jasperserver.jaxrs.client.core.operationresult.OperationResult;
 import com.jaspersoft.jasperserver.jaxrs.client.dto.importexport.StateDto;
-import java.io.File;
-import java.net.URISyntaxException;
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.testng.annotations.AfterGroups;
 import org.testng.annotations.BeforeGroups;
 import org.testng.annotations.Test;
 
-import static org.testng.Assert.assertTrue;
+import java.io.File;
+import java.net.URISyntaxException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.testng.Assert.assertEquals;
 
 /**
  * @author Tetiana Iefimenko
  */
 public class DomainServiceTest extends RestClientTestUtil {
 
-    private static final String RESOURCES_LOCAL_FOLDER = "D:\\workspaceIdea\\jrs-rest-java-client-tests\\src\\main\\resources\\imports\\domains";
+    private static final String RESOURCES_LOCAL_FOLDER = "src/test/resources/imports/domains";
     private static final String EXPORT_SERVER_URI = "/temp/exportResources";
     private static final String DESTINATION_COPY_URI = "/temp/DomainsRestCopies";
     private static final String DESTINATION_COPY_LABEL = "DomainsRestCopies";
 
     private static final String INPROGRESS_STATUS = "inprogress";
-    private static final String NEW_LINE_CHARS = "\n\n";
-    public static final Logger CONSOLE_LOGGER = Logger.getLogger("consoleLogger");
     public static final Logger TEST_LOGGER = Logger.getLogger(DomainServiceTest.class.getName());
 
     @BeforeGroups(groups = {"domains"})
@@ -73,46 +72,52 @@ public class DomainServiceTest extends RestClientTestUtil {
                 .parameter(ResourceSearchParameter.TYPE, ResourceMediaType.SEMANTIC_LAYER_DATA_SOURCE_CLIENT_TYPE)
                 .search()
                 .getEntity();
-
-        Map<String, String> resultMap = new HashMap<String, String>(list.getResourceLookups().size());
-        for (ClientResourceLookup resourceLookup : list.getResourceLookups()) {
+        Map<String, String> resultMap = new HashMap<String, String>();
+        final List<ClientResourceLookup> resourceLookups = list.getResourceLookups();
+        TEST_LOGGER.info("Testing domains. Domains count: " + resourceLookups.size());
+        for (ClientResourceLookup resourceLookup : resourceLookups) {
 
             /*
             * Each resource get as domain, clone, post to server, get posted clone and compare with uploaded domain
             * */
+            final String uri = resourceLookup.getUri();
+            TEST_LOGGER.debug("Testing domain: " + uri);
             String result = executeTest(resourceLookup);
             if (result != null) {
-                resultMap.put(resourceLookup.getUri(), result);
-                if (resultMap.size() != 0) {
-                    if (CONSOLE_LOGGER.getLevel().equals(Level.DEBUG)) {
-                        CONSOLE_LOGGER.debug(NEW_LINE_CHARS + resourceLookup.getUri() + " : " + result);
-                    } else {
-                        CONSOLE_LOGGER.info(NEW_LINE_CHARS + resourceLookup.getUri());
-                    }
+                resultMap.put(uri, result);
+                if (TEST_LOGGER.isDebugEnabled()) {
+                    TEST_LOGGER.debug("FAILED: " + result);
+                } else {
+                    TEST_LOGGER.info("FAILED " + uri);
                 }
+            } else {
+                TEST_LOGGER.info("PASSED " + uri);
             }
-        }
 
-        assertTrue(resultMap.size() == 0);
+        }
+        assertEquals(resultMap.size(), 0, "Failed domains: " + resultMap.keySet().toString());
     }
 
     private String executeTest(ClientResourceLookup clientResourceLookup) throws URISyntaxException, InterruptedException {
-        TEST_LOGGER.debug("Start to test " + clientResourceLookup.getUri());
+        final String uri = clientResourceLookup.getUri();
             /*
             * Get domain form server
             * */
         ClientDomain domain;
         OperationResult<ClientDomain> operationResult = session
                 .domainService()
-                .domain(clientResourceLookup.getUri())
+                .domain(uri)
                 .get();
         try {
             domain = operationResult.getEntity();
-            TEST_LOGGER.debug("GET domain from server");
+            TEST_LOGGER.debug("GET passed");
         } catch (JSClientWebException e) {
-            TEST_LOGGER.info("GET " + clientResourceLookup.getUri()
-                    + " from server failed with error "
-                    + operationResult.getSerializedContent());
+            TEST_LOGGER.debug("GET failed. Error code:" + operationResult.getResponseStatus());
+            if (TEST_LOGGER.isTraceEnabled())
+                TEST_LOGGER.trace(operationResult.getSerializedContent());
+            TEST_LOGGER.debug("COPY skipped");
+            TEST_LOGGER.debug("GET copy skipped");
+            TEST_LOGGER.debug("Comparison skipped");
             return operationResult.getSerializedContent();
         }
         domain.setSecurityFile(null);
@@ -127,20 +132,20 @@ public class DomainServiceTest extends RestClientTestUtil {
         * Post domain to server
         * */
 
-        String newUri = clientResourceLookup.getUri().replace(EXPORT_SERVER_URI, DESTINATION_COPY_URI);
+        String newUri = uri.replace(EXPORT_SERVER_URI, DESTINATION_COPY_URI);
         try {
             operationResult = session
                     .domainService()
                     .domain(newUri)
                     .update(clonedDomain);
             operationResult.getEntity();
-            TEST_LOGGER.debug("PUT domain to server");
+            TEST_LOGGER.debug("COPY passed");
         } catch (Exception e) {
-            TEST_LOGGER.info("PUT domain "
-                    + clonedDomain.getUri()
-                    + " to server failed with error "
-                    + NEW_LINE_CHARS
-                    + operationResult.getSerializedContent());
+            TEST_LOGGER.debug("COPY failed. Error code: " + operationResult.getResponseStatus());
+            if (TEST_LOGGER.isTraceEnabled())
+                TEST_LOGGER.trace(operationResult.getSerializedContent());
+            TEST_LOGGER.debug("GET copy skipped");
+            TEST_LOGGER.debug("Comparison skipped");
             return operationResult.getSerializedContent();
         }
         /*
@@ -155,12 +160,12 @@ public class DomainServiceTest extends RestClientTestUtil {
                 .get();
         try {
             retrievedDomain = operationResult.getEntity();
-            TEST_LOGGER.debug("GET domain from server");
+            TEST_LOGGER.debug("GET copy passed");
         } catch (JSClientWebException e) {
-            TEST_LOGGER.info("GET "
-                    + clientResourceLookup.getUri()
-                    + " from server failed with error "
-                    + operationResult.getSerializedContent());
+            TEST_LOGGER.debug("GET copy failed. Error code: " + operationResult.getResponseStatus());
+            if (TEST_LOGGER.isTraceEnabled())
+                TEST_LOGGER.trace(operationResult.getSerializedContent());
+            TEST_LOGGER.debug("Comparison skipped");
             return operationResult.getSerializedContent();
         }
         domain.setCreationDate(null);
@@ -171,12 +176,11 @@ public class DomainServiceTest extends RestClientTestUtil {
         retrievedDomain.setUpdateDate(null);
         retrievedDomain.setUri(null);
 
-        TEST_LOGGER.debug("Compare original and cloned domains");
         if (domain.equals(retrievedDomain)) {
-            TEST_LOGGER.debug("Domains are equal, test for " + domain.getLabel() + " passed");
+            TEST_LOGGER.debug("Comparison passed");
             return null;
         } else {
-            TEST_LOGGER.info("Domains are not equal, test for " + domain.getLabel() + " filed");
+            TEST_LOGGER.debug("Comparison failed");
             return "Domains are not equal";
         }
     }
@@ -186,9 +190,9 @@ public class DomainServiceTest extends RestClientTestUtil {
         File folder = new File(folderName);
         File[] listOfResources = folder.listFiles();
         if (listOfResources.length > 0) {
-            TEST_LOGGER.debug("For upload were founded " + listOfResources.length + "resources");
+            TEST_LOGGER.debug("Import. Catalogs count: " + listOfResources.length);
         } else {
-            TEST_LOGGER.debug("Resources were not founded");
+            TEST_LOGGER.debug("Import catalogs were not found");
             return;
         }
         if (listOfResources.length > 0) {
@@ -208,7 +212,7 @@ public class DomainServiceTest extends RestClientTestUtil {
                             .state().getEntity();
                     Thread.sleep(100);
                 }
-                TEST_LOGGER.debug(resource.getName() + " was uploaded successfully");
+                TEST_LOGGER.debug("Import completed: " + resource.getName());
             }
         }
     }

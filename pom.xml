@@ -13,6 +13,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <test.properties.file>src/main/resources/default_test_config.properties</test.properties.file>
         <jrs.client.version>6.2.1_domain_designer</jrs.client.version>
+        <log.level>info</log.level>
     </properties>
     <repositories>
         <repository>
